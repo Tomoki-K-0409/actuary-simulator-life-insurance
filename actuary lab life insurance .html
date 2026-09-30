@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>生保アクチュアリー シミュレーター</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0c1220;
+    --bg2: #131c2e;
+    --bg3: #1a2540;
+    --panel: #1e2d47;
+    --border: #2a3f5f;
+    --accent: #3b82f6;
+    --accent2: #06b6d4;
+    --green: #10b981;
+    --amber: #f59e0b;
+    --red: #ef4444;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #64748b;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'Noto Sans JP', sans-serif;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  *, *::before, *::after { box-sizing: inherit; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.6; }
+
+  /* Layout */
+  .app { display: grid; grid-template-rows: auto 1fr; min-height: 100vh; }
+  header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-icon { width: 32px; height: 32px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .logo-text { font-size: 15px; font-weight: 700; letter-spacing: 0.02em; }
+  .logo-sub { font-size: 11px; color: var(--text3); font-family: var(--mono); }
+  .tabs { display: flex; gap: 4px; background: var(--bg3); padding: 4px; border-radius: 10px; }
+  .tab { padding: 7px 16px; border-radius: 7px; border: none; background: transparent; color: var(--text2); cursor: pointer; font-family: var(--sans); font-size: 13px; font-weight: 500; transition: all .15s; white-space: nowrap; }
+  .tab.active { background: var(--accent); color: #fff; }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  main { display: grid; grid-template-columns: 320px 1fr; gap: 0; overflow: hidden; height: calc(100vh - 65px); }
+  .sidebar { background: var(--bg2); border-right: 1px solid var(--border); overflow-y: auto; padding: 20px 16px; display: flex; flex-direction: column; gap: 16px; }
+  .content { overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+
+  /* Page sections */
+  .page { display: none; }
+  .page.active { display: contents; }
+
+  /* Cards */
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .card-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: var(--text3); text-transform: uppercase; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+  .card-title .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+
+  /* Controls */
+  .control { margin-bottom: 14px; }
+  .control label { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--text2); margin-bottom: 5px; }
+  .control label span { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--accent2); }
+  input[type=range] { width: 100%; -webkit-appearance: none; height: 4px; background: var(--bg3); border-radius: 2px; outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; box-shadow: 0 0 0 3px rgba(59,130,246,.2); }
+  select, input[type=number] { width: 100%; padding: 8px 10px; background: var(--bg3); border: 1px solid var(--border); border-radius: 7px; color: var(--text); font-family: var(--sans); font-size: 13px; outline: none; }
+  select:focus, input[type=number]:focus { border-color: var(--accent); }
+
+  /* KPI row */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .kpi { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .kpi-label { font-size: 10px; color: var(--text3); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 4px; }
+  .kpi-val { font-family: var(--mono); font-size: 22px; font-weight: 600; color: var(--text); }
+  .kpi-val.highlight { color: var(--accent2); }
+  .kpi-val.green { color: var(--green); }
+  .kpi-unit { font-size: 10px; color: var(--text3); margin-top: 2px; }
+
+  /* Table */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { background: var(--bg3); color: var(--text3); font-weight: 600; padding: 8px 12px; text-align: right; font-family: var(--mono); font-size: 11px; border-bottom: 1px solid var(--border); }
+  th:first-child { text-align: left; }
+  td { padding: 7px 12px; text-align: right; font-family: var(--mono); border-bottom: 1px solid rgba(42,63,95,.5); color: var(--text2); }
+  td:first-child { text-align: left; color: var(--text); font-weight: 500; }
+  tr:hover td { background: rgba(59,130,246,.05); }
+  tr.total-row td { color: var(--accent2); font-weight: 700; border-top: 1px solid var(--border); }
+
+  /* Chart */
+  .chart-area { position: relative; height: 220px; }
+  canvas { width: 100% !important; height: 100% !important; }
+
+  /* SVG bar chart */
+  .bar-chart { width: 100%; overflow: visible; }
+
+  /* Quiz / Training */
+  .quiz-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .quiz-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .quiz-progress { font-family: var(--mono); font-size: 11px; color: var(--text3); }
+  .question-text { font-size: 15px; font-weight: 500; line-height: 1.7; margin-bottom: 20px; color: var(--text); }
+  .options { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .option-btn { padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg3); color: var(--text); cursor: pointer; text-align: left; font-family: var(--sans); font-size: 13px; transition: all .15s; }
+  .option-btn:hover:not(:disabled) { border-color: var(--accent); background: rgba(59,130,246,.1); }
+  .option-btn.correct { border-color: var(--green); background: rgba(16,185,129,.15); color: var(--green); }
+  .option-btn.wrong { border-color: var(--red); background: rgba(239,68,68,.1); color: var(--red); }
+  .option-btn:disabled { cursor: default; }
+  .explanation { background: rgba(59,130,246,.08); border-left: 3px solid var(--accent); padding: 12px 14px; border-radius: 0 8px 8px 0; font-size: 13px; color: var(--text2); line-height: 1.7; display: none; }
+  .explanation.show { display: block; }
+  .btn { padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-family: var(--sans); font-size: 13px; font-weight: 600; transition: all .15s; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #2563eb; }
+  .btn-outline { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  .btn-outline:hover { background: rgba(59,130,246,.1); }
+  .score-box { text-align: center; padding: 32px; }
+  .score-big { font-family: var(--mono); font-size: 56px; font-weight: 700; color: var(--accent2); line-height: 1; }
+  .score-label { color: var(--text2); font-size: 14px; margin-top: 8px; }
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 20px; font-size: 10px; font-weight: 700; letter-spacing: 0.05em; }
+  .badge-blue { background: rgba(59,130,246,.15); color: var(--accent); border: 1px solid rgba(59,130,246,.3); }
+  .badge-green { background: rgba(16,185,129,.15); color: var(--green); border: 1px solid rgba(16,185,129,.3); }
+  .badge-amber { background: rgba(245,158,11,.15); color: var(--amber); border: 1px solid rgba(245,158,11,.3); }
+
+  /* Sensitivity chart */
+  .sens-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .sens-label { font-size: 12px; color: var(--text2); width: 90px; flex-shrink: 0; }
+  .sens-bar-bg { flex: 1; height: 8px; background: var(--bg3); border-radius: 4px; overflow: hidden; }
+  .sens-bar { height: 100%; border-radius: 4px; transition: width .4s; }
+  .sens-val { font-family: var(--mono); font-size: 11px; color: var(--accent2); width: 60px; text-align: right; flex-shrink: 0; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg2); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Formula display */
+  .formula { font-family: var(--mono); background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-size: 12px; color: var(--accent2); line-height: 1.9; overflow-x: auto; }
+  .formula .comment { color: var(--text3); }
+
+  /* Tooltip */
+  .tooltip-wrap { position: relative; display: inline-block; }
+  .tooltip-icon { font-size: 10px; color: var(--text3); cursor: help; border: 1px solid var(--text3); border-radius: 50%; width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center; }
+
+  /* Responsive */
+  @media (max-width: 700px) {
+    main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    .sidebar { border-right: none; border-bottom: 1px solid var(--border); max-height: 280px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div class="logo">
+    <div class="logo-icon">📊</div>
+    <div>
+      <div class="logo-text">Actuary Lab</div>
+      <div class="logo-sub">生命保険 · 保険数理シミュレーター</div>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('sim')">料率計算</button>
+    <button class="tab" onclick="switchTab('sensitivity')">感応度分析</button>
+    <button class="tab" onclick="switchTab('training')">技能訓練</button>
+  </div>
+</header>
+
+<main>
+<!-- ===== SIDEBAR ===== -->
+<div class="sidebar">
+  <div class="card">
+    <div class="card-title"><span class="dot"></span>被保険者設定</div>
+    <div class="control">
+      <label>加入年齢 <span id="age-val">35 歳</span></label>
+      <input type="range" id="age" min="20" max="65" value="35" oninput="update()">
+    </div>
+    <div class="control">
+      <label>性別</label>
+      <select id="sex" onchange="update()">
+        <option value="male">男性</option>
+        <option value="female">女性</option>
+      </select>
+    </div>
+    <div class="control">
+      <label>保険期間 <span id="term-val">10 年</span></label>
+      <input type="range" id="term" min="5" max="30" step="5" value="10" oninput="update()">
+    </div>
+    <div class="control">
+      <label>保険金額 <span id="sa-val">1,000 万円</span></label>
+      <input type="range" id="sa" min="100" max="5000" step="100" value="1000" oninput="update()">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="dot"></span>アクチュアリー仮定</div>
+    <div class="control">
+      <label>予定利率 <span id="int-val">1.50 %</span></label>
+      <input type="range" id="intRate" min="0.0" max="5.0" step="0.25" value="1.5" oninput="update()">
+    </div>
+    <div class="control">
+      <label>死亡率水準 <span id="mort-val">100 %</span></label>
+      <input type="range" id="mortMult" min="50" max="200" step="5" value="100" oninput="update()">
+      <div style="font-size:10px;color:var(--text3);margin-top:3px;">標準生命表 × 倍率</div>
+    </div>
+    <div class="control">
+      <label>付加保険料率 <span id="load-val">20 %</span></label>
+      <input type="range" id="loading" min="5" max="50" step="5" value="20" oninput="update()">
+    </div>
+    <div class="control">
+      <label>生命表</label>
+      <select id="table" onchange="update()">
+        <option value="2018">標準生命表2018</option>
+        <option value="2007">標準生命表2007</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="dot"></span>計算式</div>
+    <div class="formula">
+<span class="comment">// 純保険料率</span>
+P = Σ v^(t+1) · ₜpₓ · qₓ₊ₜ
+  ÷ ä<sub style="font-family:var(--sans)">x:n</sub>
+
+<span class="comment">// 割引率</span>
+v = 1 / (1 + i)
+
+<span class="comment">// 生存確率</span>
+ₜpₓ = Π(1 - qₓ₊ₛ)
+
+<span class="comment">// 総保険料</span>
+G = P × (1 + θ)
+    </div>
+  </div>
+</div>
+
+<!-- ===== MAIN CONTENT ===== -->
+<div class="content">
+
+  <!-- TAB: 料率計算 -->
+  <div id="tab-sim" class="page active">
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="kpi-label">純保険料率（千円あたり）</div>
+        <div class="kpi-val highlight" id="kpi-net">—</div>
+        <div class="kpi-unit">円 / 千円</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">総保険料率</div>
+        <div class="kpi-val" id="kpi-gross">—</div>
+        <div class="kpi-unit">円 / 千円</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">年間保険料</div>
+        <div class="kpi-val green" id="kpi-annual">—</div>
+        <div class="kpi-unit">万円 / 年</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">保険期間中 累積死亡率</div>
+        <div class="kpi-val" id="kpi-cumdeath">—</div>
+        <div class="kpi-unit">%</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>年次計算テーブル（コミュテーション関数）</div>
+      <div class="table-wrap">
+        <table id="act-table">
+          <thead>
+            <tr>
+              <th>年齢 x</th>
+              <th>経過年 t</th>
+              <th>死亡率 qₓ</th>
+              <th>生存確率 ₜpₓ</th>
+              <th>割引係数 vᵗ⁺¹</th>
+              <th>死亡現価</th>
+              <th>生存年金現価</th>
+            </tr>
+          </thead>
+          <tbody id="act-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>死亡率プロファイル（各年リスク）</div>
+      <div class="chart-area">
+        <svg id="mort-svg" viewBox="0 0 700 200" class="bar-chart" preserveAspectRatio="none"></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: 感応度分析 -->
+  <div id="tab-sensitivity" style="display:none;">
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>保険料率感応度（各パラメータ ±10% 変化時の影響）</div>
+      <div id="sens-content" style="margin-top:8px;"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>予定利率 vs 純保険料率</div>
+      <div class="chart-area">
+        <svg id="rate-svg" viewBox="0 0 700 200" class="bar-chart" preserveAspectRatio="none"></svg>
+      </div>
+      <div style="margin-top:8px;font-size:11px;color:var(--text3);">予定利率を 0〜5% で変化させた場合の純保険料率推移（現在の設定値でシミュレーション）</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>加入年齢 vs 純保険料率</div>
+      <div class="chart-area">
+        <svg id="age-svg" viewBox="0 0 700 200" class="bar-chart" preserveAspectRatio="none"></svg>
+      </div>
+      <div style="margin-top:8px;font-size:11px;color:var(--text3);">年齢20〜65歳で変化させた場合の純保険料率（現在の設定で保険期間・その他固定）</div>
+    </div>
+  </div>
+
+  <!-- TAB: 技能訓練 -->
+  <div id="tab-training" style="display:none;">
+    <div class="card" style="margin-bottom:0">
+      <div class="card-title"><span class="dot"></span>アクチュアリー技能問題</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;" id="difficulty-row">
+        <button class="btn btn-primary" onclick="setDiff('basic')">基礎</button>
+        <button class="btn btn-outline" onclick="setDiff('intermediate')">応用</button>
+        <button class="btn btn-outline" onclick="setDiff('advanced')">上級</button>
+      </div>
+      <div id="quiz-container"></div>
+    </div>
+  </div>
+
+</div><!-- /content -->
+</main>
+</div>
+
+<script>
+// ============================================================
+// 死亡率データ（簡略版 標準生命表2018 男性・女性ベース）
+// ============================================================
+const mortTable = {
+  '2018': {
+    male: {
+      20:0.000596,21:0.000626,22:0.000644,23:0.000649,24:0.000648,
+      25:0.000648,26:0.000656,27:0.000668,28:0.000682,29:0.000701,
+      30:0.000729,31:0.000764,32:0.000808,33:0.000860,34:0.000920,
+      35:0.000991,36:0.001074,37:0.001171,38:0.001283,39:0.001411,
+      40:0.001559,41:0.001730,42:0.001928,43:0.002157,44:0.002420,
+      45:0.002723,46:0.003072,47:0.003471,48:0.003920,49:0.004411,
+      50:0.004941,51:0.005525,52:0.006172,53:0.006894,54:0.007697,
+      55:0.008591,56:0.009581,57:0.010671,58:0.011866,59:0.013174,
+      60:0.014597,61:0.016139,62:0.017800,63:0.019579,64:0.021489,
+      65:0.023537,66:0.025726,67:0.028063,68:0.030553,69:0.033210,
+      70:0.036130,71:0.039413,72:0.043159,73:0.047461,74:0.052409,
+    },
+    female: {
+      20:0.000219,21:0.000222,22:0.000220,23:0.000217,24:0.000214,
+      25:0.000214,26:0.000218,27:0.000225,28:0.000236,29:0.000249,
+      30:0.000266,31:0.000286,32:0.000311,33:0.000341,34:0.000377,
+      35:0.000418,36:0.000465,37:0.000518,38:0.000577,39:0.000642,
+      40:0.000715,41:0.000799,42:0.000895,43:0.001007,44:0.001135,
+      45:0.001281,46:0.001448,47:0.001633,48:0.001836,49:0.002060,
+      50:0.002308,51:0.002585,52:0.002895,53:0.003243,54:0.003634,
+      55:0.004073,56:0.004564,57:0.005110,58:0.005716,59:0.006384,
+      60:0.007122,61:0.007938,62:0.008842,63:0.009845,64:0.010960,
+      65:0.012203,66:0.013589,67:0.015129,68:0.016838,69:0.018727,
+      70:0.020810,71:0.023108,72:0.025645,73:0.028450,74:0.031554,
+    }
+  },
+  '2007': {
+    male: {
+      20:0.000782,21:0.000833,22:0.000860,23:0.000870,24:0.000870,
+      25:0.000870,26:0.000882,27:0.000897,28:0.000916,29:0.000940,
+      30:0.000973,31:0.001016,32:0.001070,33:0.001135,34:0.001213,
+      35:0.001304,36:0.001411,37:0.001535,38:0.001679,39:0.001845,
+      40:0.002034,41:0.002251,42:0.002498,43:0.002781,44:0.003103,
+      45:0.003469,46:0.003886,47:0.004360,48:0.004895,49:0.005496,
+      50:0.006164,51:0.006906,52:0.007725,53:0.008626,54:0.009612,
+      55:0.010690,56:0.011864,57:0.013137,58:0.014516,59:0.016003,
+      60:0.017604,61:0.019322,62:0.021159,63:0.023119,64:0.025205,
+      65:0.027426,66:0.029796,67:0.032331,68:0.035048,69:0.037966,
+      70:0.041107,71:0.044527,72:0.048297,73:0.052518,74:0.057322,
+    },
+    female: {
+      20:0.000305,21:0.000308,22:0.000307,23:0.000305,24:0.000302,
+      25:0.000302,26:0.000307,27:0.000315,28:0.000328,29:0.000345,
+      30:0.000367,31:0.000395,32:0.000430,33:0.000472,34:0.000522,
+      35:0.000580,36:0.000646,37:0.000721,38:0.000804,39:0.000897,
+      40:0.000999,41:0.001113,42:0.001241,43:0.001388,44:0.001556,
+      45:0.001748,46:0.001966,47:0.002211,48:0.002484,49:0.002786,
+      50:0.003118,51:0.003487,52:0.003897,53:0.004356,54:0.004869,
+      55:0.005443,56:0.006082,57:0.006792,58:0.007576,59:0.008439,
+      60:0.009385,61:0.010423,62:0.011561,63:0.012807,64:0.014172,
+      65:0.015667,66:0.017307,67:0.019107,68:0.021081,69:0.023243,
+      70:0.025608,71:0.028199,72:0.031040,73:0.034155,74:0.037578,
+    }
+  }
+};
+
+function getQ(age, sex, table) {
+  const t = mortTable[table] || mortTable['2018'];
+  const g = t[sex] || t['male'];
+  return g[age] ?? g[Math.min(74, Math.max(20, age))] ?? 0.01;
+}
+
+// ============================================================
+// Core Calculation
+// ============================================================
+function calcPremiumRate(age, sex, term, intRate, mortMult, table) {
+  const v = 1 / (1 + intRate / 100);
+  let tpx = 1;
+  let sumDeath = 0; // Σ v^(t+1) * tpx * qx+t
+  let sumLife = 0;  // ä x:n = Σ v^t * tpx
+  const rows = [];
+
+  for (let t = 0; t < term; t++) {
+    const x = age + t;
+    const qx = getQ(x, sex, table) * (mortMult / 100);
+    const vt1 = Math.pow(v, t + 1);
+    const vt = Math.pow(v, t);
+    const deathPV = vt1 * tpx * qx;
+    const lifePV = vt * tpx;
+    sumDeath += deathPV;
+    sumLife += lifePV;
+    rows.push({ x, t, qx, tpx, vt1, deathPV, lifePV });
+    tpx *= (1 - qx);
+  }
+  // Period-end survival
+  sumLife += Math.pow(v, term) * tpx;
+
+  const netRate = sumLife > 0 ? (sumDeath / sumLife) * 1000 : 0; // per 1000
+  const cumDeath = 1 - tpx;
+  return { netRate, sumDeath, sumLife, rows, cumDeath };
+}
+
+// ============================================================
+// State & Update
+// ============================================================
+let state = {};
+
+function readInputs() {
+  return {
+    age: +document.getElementById('age').value,
+    sex: document.getElementById('sex').value,
+    term: +document.getElementById('term').value,
+    intRate: +document.getElementById('intRate').value,
+    mortMult: +document.getElementById('mortMult').value,
+    loading: +document.getElementById('loading').value,
+    sa: +document.getElementById('sa').value,
+    table: document.getElementById('table').value,
+  };
+}
+
+function update() {
+  const p = readInputs();
+  state = p;
+  // Labels
+  document.getElementById('age-val').textContent = p.age + ' 歳';
+  document.getElementById('term-val').textContent = p.term + ' 年';
+  document.getElementById('sa-val').textContent = p.sa.toLocaleString() + ' 万円';
+  document.getElementById('int-val').textContent = p.intRate.toFixed(2) + ' %';
+  document.getElementById('mort-val').textContent = p.mortMult + ' %';
+  document.getElementById('load-val').textContent = p.loading + ' %';
+
+  const res = calcPremiumRate(p.age, p.sex, p.term, p.intRate, p.mortMult, p.table);
+  const grossRate = res.netRate * (1 + p.loading / 100);
+  const annualPremium = grossRate * p.sa / 100; // 万円 (sa万円 → 千円単位 ×rate/1000 ×10000 /10000)
+
+  document.getElementById('kpi-net').textContent = res.netRate.toFixed(3);
+  document.getElementById('kpi-gross').textContent = grossRate.toFixed(3);
+  document.getElementById('kpi-annual').textContent = (grossRate * p.sa / 100).toFixed(1);
+  document.getElementById('kpi-cumdeath').textContent = (res.cumDeath * 100).toFixed(2);
+
+  renderTable(res.rows, res.sumDeath, res.sumLife);
+  renderMortChart(res.rows);
+
+  if (document.getElementById('tab-sensitivity').style.display !== 'none') {
+    renderSensitivity(p, res.netRate);
+  }
+}
+
+function renderTable(rows, sumDeath, sumLife) {
+  const tbody = document.getElementById('act-tbody');
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td>${r.x}</td>
+      <td>${r.t}</td>
+      <td>${(r.qx * 1000).toFixed(4)}‰</td>
+      <td>${r.tpx.toFixed(6)}</td>
+      <td>${r.vt1.toFixed(6)}</td>
+      <td>${r.deathPV.toFixed(6)}</td>
+      <td>${r.lifePV.toFixed(6)}</td>
+    </tr>
+  `).join('') + `
+    <tr class="total-row">
+      <td colspan="5">合計</td>
+      <td>${sumDeath.toFixed(6)}</td>
+      <td>${sumLife.toFixed(6)}</td>
+    </tr>`;
+}
+
+function renderMortChart(rows) {
+  const svg = document.getElementById('mort-svg');
+  const W = 700, H = 200, pad = { l: 40, r: 10, t: 10, b: 30 };
+  const cW = W - pad.l - pad.r;
+  const cH = H - pad.t - pad.b;
+  const vals = rows.map(r => r.qx * 1000);
+  const maxV = Math.max(...vals) * 1.1;
+  const barW = Math.max(2, cW / rows.length - 2);
+
+  let s = `<rect width="${W}" height="${H}" fill="none"/>`;
+  // Y axis
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.t + cH * (1 - i / 4);
+    const v = (maxV * i / 4).toFixed(2);
+    s += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y}" y2="${y}" stroke="rgba(42,63,95,.5)" stroke-width="1"/>`;
+    s += `<text x="${pad.l - 4}" y="${y + 4}" text-anchor="end" fill="#64748b" font-size="9" font-family="IBM Plex Mono">${v}</text>`;
+  }
+  rows.forEach((r, i) => {
+    const x = pad.l + i * (cW / rows.length) + (cW / rows.length - barW) / 2;
+    const barH = (r.qx * 1000 / maxV) * cH;
+    const y = pad.t + cH - barH;
+    const alpha = 0.5 + (i / rows.length) * 0.5;
+    s += `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" fill="rgba(59,130,246,${alpha})" rx="1"/>`;
+    if (i % Math.ceil(rows.length / 10) === 0 || i === rows.length - 1) {
+      s += `<text x="${x + barW / 2}" y="${H - 8}" text-anchor="middle" fill="#64748b" font-size="9" font-family="IBM Plex Mono">${r.x}</text>`;
+    }
+  });
+  s += `<text x="${pad.l}" y="${H - 8}" text-anchor="start" fill="#64748b" font-size="8" font-family="IBM Plex Mono">年齢</text>`;
+  s += `<text x="${pad.l - 12}" y="${pad.t + cH / 2}" text-anchor="middle" fill="#64748b" font-size="8" font-family="IBM Plex Mono" transform="rotate(-90 ${pad.l - 12} ${pad.t + cH / 2})">死亡率 ‰</text>`;
+  svg.innerHTML = s;
+}
+
+// ============================================================
+// Sensitivity Tab
+// ============================================================
+function renderSensitivity(p, baseNet) {
+  // Calc impact of ±10% change on each param
+  const params = [
+    { key: 'intRate', label: '予定利率 +10%', delta: { intRate: p.intRate * 1.1 } },
+    { key: 'intRate2', label: '予定利率 −10%', delta: { intRate: p.intRate * 0.9 } },
+    { key: 'mortMult', label: '死亡率水準 +10%', delta: { mortMult: p.mortMult * 1.1 } },
+    { key: 'mortMult2', label: '死亡率水準 −10%', delta: { mortMult: p.mortMult * 0.9 } },
+    { key: 'term', label: '保険期間 +10%', delta: { term: Math.min(30, Math.round(p.term * 1.1)) } },
+    { key: 'age', label: '加入年齢 +5歳', delta: { age: Math.min(60, p.age + 5) } },
+  ];
+
+  const results = params.map(pm => {
+    const np = { ...p, ...pm.delta };
+    const r = calcPremiumRate(np.age, np.sex, np.term, np.intRate, np.mortMult, np.table);
+    const pct = baseNet > 0 ? ((r.netRate - baseNet) / baseNet * 100) : 0;
+    return { label: pm.label, pct, dir: pct >= 0 };
+  });
+
+  const maxAbs = Math.max(...results.map(r => Math.abs(r.pct)), 0.1);
+
+  const html = results.map(r => {
+    const width = Math.abs(r.pct) / maxAbs * 100;
+    const color = r.dir ? 'var(--red)' : 'var(--green)';
+    return `<div class="sens-row">
+      <div class="sens-label">${r.label}</div>
+      <div class="sens-bar-bg"><div class="sens-bar" style="width:${width}%;background:${color}"></div></div>
+      <div class="sens-val">${r.pct >= 0 ? '+' : ''}${r.pct.toFixed(2)}%</div>
+    </div>`;
+  }).join('');
+  document.getElementById('sens-content').innerHTML = html;
+
+  // Rate vs interest rate chart
+  renderLineChart('rate-svg', Array.from({length:21}, (_,i) => i*0.25), i => {
+    const r = calcPremiumRate(p.age, p.sex, p.term, i, p.mortMult, p.table);
+    return r.netRate;
+  }, '予定利率 %', '純保険料率 (千円あたり円)');
+
+  // Rate vs age chart
+  renderLineChart('age-svg', Array.from({length:46}, (_,i) => i+20), a => {
+    if (a + p.term > 75) return null;
+    const r = calcPremiumRate(a, p.sex, p.term, p.intRate, p.mortMult, p.table);
+    return r.netRate;
+  }, '加入年齢', '純保険料率 (千円あたり円)');
+}
+
+function renderLineChart(svgId, xs, fn, xLabel, yLabel) {
+  const svg = document.getElementById(svgId);
+  if (!svg) return;
+  const W = 700, H = 200, pad = { l: 55, r: 15, t: 15, b: 35 };
+  const cW = W - pad.l - pad.r, cH = H - pad.t - pad.b;
+  const pts = xs.map(x => ({ x, y: fn(x) })).filter(p => p.y !== null && !isNaN(p.y));
+  if (pts.length < 2) { svg.innerHTML = ''; return; }
+  const minY = Math.min(...pts.map(p => p.y));
+  const maxY = Math.max(...pts.map(p => p.y));
+  const minX = pts[0].x, maxX = pts[pts.length - 1].x;
+  const toSvg = (x, y) => ({
+    sx: pad.l + (x - minX) / (maxX - minX) * cW,
+    sy: pad.t + cH - (y - minY) / (maxY - minY + 0.0001) * cH
+  });
+  let s = '';
+  // Grid
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.t + cH * i / 4;
+    const v = maxY - (maxY - minY) * i / 4;
+    s += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y}" y2="${y}" stroke="rgba(42,63,95,.5)" stroke-width="1"/>`;
+    s += `<text x="${pad.l - 5}" y="${y + 4}" text-anchor="end" fill="#64748b" font-size="9" font-family="IBM Plex Mono">${v.toFixed(2)}</text>`;
+  }
+  for (let i = 0; i <= 5; i++) {
+    const x = pad.l + cW * i / 5;
+    const v = minX + (maxX - minX) * i / 5;
+    s += `<line x1="${x}" x2="${x}" y1="${pad.t}" y2="${pad.t + cH}" stroke="rgba(42,63,95,.3)" stroke-width="1"/>`;
+    s += `<text x="${x}" y="${H - 10}" text-anchor="middle" fill="#64748b" font-size="9" font-family="IBM Plex Mono">${v.toFixed(1)}</text>`;
+  }
+  // Line
+  const polyPoints = pts.map(p => {
+    const { sx, sy } = toSvg(p.x, p.y);
+    return `${sx},${sy}`;
+  }).join(' ');
+  // Fill area
+  const { sx: x0, sy: y0 } = toSvg(pts[0].x, minY);
+  const { sx: xN } = toSvg(pts[pts.length - 1].x, minY);
+  s += `<polygon points="${x0},${pad.t + cH} ${polyPoints} ${xN},${pad.t + cH}" fill="rgba(59,130,246,.12)"/>`;
+  s += `<polyline points="${polyPoints}" fill="none" stroke="var(--accent2)" stroke-width="2.5"/>`;
+  // Labels
+  s += `<text x="${W / 2}" y="${H - 2}" text-anchor="middle" fill="#64748b" font-size="9" font-family="IBM Plex Mono">${xLabel}</text>`;
+  s += `<text x="10" y="${pad.t + cH / 2}" text-anchor="middle" fill="#64748b" font-size="8" font-family="IBM Plex Mono" transform="rotate(-90 10 ${pad.t + cH / 2})">${yLabel}</text>`;
+  svg.innerHTML = s;
+}
+
+// ============================================================
+// Tab switching
+// ============================================================
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', ['sim', 'sensitivity', 'training'][i] === tab);
+  });
+  document.getElementById('tab-sim').style.display = tab === 'sim' ? '' : 'none';
+  document.getElementById('tab-sensitivity').style.display = tab === 'sensitivity' ? '' : 'none';
+  document.getElementById('tab-training').style.display = tab === 'training' ? '' : 'none';
+  if (tab === 'sensitivity') {
+    const p = readInputs();
+    const res = calcPremiumRate(p.age, p.sex, p.term, p.intRate, p.mortMult, p.table);
+    renderSensitivity(p, res.netRate);
+  }
+  if (tab === 'training') initQuiz();
+}
+
+// ============================================================
+// Training / Quiz
+// ============================================================
+const QUESTIONS = {
+  basic: [
+    {
+      q: "純保険料の計算において、予定利率が上昇した場合、純保険料率はどうなるか？",
+      opts: ["上昇する", "低下する", "変化しない", "保険期間による"],
+      ans: 1,
+      exp: "予定利率が上昇すると、将来の保険金支払いの現在価値（割引現価）が小さくなります。したがって、収支相等の原則から純保険料率は低下します。割引率 v = 1/(1+i) が小さくなるため、死亡現価の合計が減少するためです。"
+    },
+    {
+      q: "収支相等の原則とは何か？最も正確な説明はどれか？",
+      opts: [
+        "保険会社の利益がゼロになること",
+        "保険料の現価の合計 = 保険金・給付の現価の合計",
+        "死亡率が予定と一致すること",
+        "純保険料 = 付加保険料"
+      ],
+      ans: 1,
+      exp: "収支相等の原則とは、「保険料の現価の合計 ＝ 保険金・給付の現価の合計」が成立することです。これはアクチュアリー計算の基本原則で、この関係から純保険料率が導かれます。"
+    },
+    {
+      q: "コミュテーション関数 Dₓ の定義として正しいものはどれか？",
+      opts: ["Dₓ = lₓ / vˣ", "Dₓ = lₓ · vˣ", "Dₓ = dₓ · vˣ⁺¹", "Dₓ = lₓ · qₓ"],
+      ans: 1,
+      exp: "Dₓ = lₓ · vˣ です。lₓ は x 歳の生存数、v = 1/(1+i) は割引因子です。コミュテーション関数は計算の簡略化のために使われる数表です。"
+    },
+    {
+      q: "定期保険の保険期間を長くした場合、純保険料率はどうなるか？（他の条件を固定）",
+      opts: ["必ず低下する", "一般に上昇する", "変化しない", "必ず低下した後上昇する"],
+      ans: 1,
+      exp: "保険期間を長くすると、高齢期（死亡率が高い期間）もカバーするため、死亡現価の合計が増加し、一般に純保険料率は上昇します。ただし生存年金現価の分母も変化するため、単純ではありませんが傾向として上昇します。"
+    },
+    {
+      q: "生命保険の三利源（利差・死差・費差）のうち、予定死亡率より実際の死亡率が低い場合に生じる利源はどれか？",
+      opts: ["利差益", "死差益", "費差益", "解約差益"],
+      ans: 1,
+      exp: "予定死亡率より実際の死亡率が低い場合（実際の死亡者が少ない場合）は、支払保険金が予定より少なくなるため「死差益」が生じます。死差損益は（予定死亡率 − 実際死亡率）× 危険保険金額で計算されます。"
+    },
+  ],
+  intermediate: [
+    {
+      q: "責任準備金（純保険料式）の計算において、期末責任準備金 ₜV が増加する要因として最も影響が大きいものはどれか？",
+      opts: ["予定利率の上昇", "保険期間の経過（保険加入後の年数増加）", "死亡率の低下", "保険金額の減少"],
+      ans: 1,
+      exp: "期末責任準備金は保険期間の経過とともに蓄積されていきます（貯蓄性保険の場合）。保険期間の経過により、残存リスク期間が短くなる一方で蓄積保険料が増加するため、準備金が増加します。定期保険では逆に減少するケースもあります。"
+    },
+    {
+      q: "次の純保険料式責任準備金の漸化式（テラー方程式）はどれか？\n（ₜV は t 年末準備金、P は純保険料、i は予定利率、qₓ₊ₜ は死亡率、S は死亡保険金）",
+      opts: [
+        "(ₜV + P)(1 + i) = qₓ₊ₜ · S + (1 − qₓ₊ₜ) · ₜ₊₁V",
+        "(ₜV − P)(1 + i) = qₓ₊ₜ · S + ₜ₊₁V",
+        "ₜ₊₁V = ₜV · (1 + i) + P − qₓ₊ₜ · S",
+        "(ₜV + P) = qₓ₊ₜ · S / (1 + i) + ₜ₊₁V"
+      ],
+      ans: 0,
+      exp: "テラー方程式（Thiele's differential equation の離散版）は、「(期始準備金 + 保険料) × 利息 ＝ 死亡保険金 × 死亡率 + 翌年準備金 × 生存率」という収支相等関係を表します。(ₜV + P)(1+i) = qₓ₊ₜ · S + (1−qₓ₊ₜ) · ₜ₊₁V が正しい形です。"
+    },
+    {
+      q: "保険料積立方式（net premium reserve）における危険保険金額（NAR: Net Amount at Risk）の定義はどれか？",
+      opts: [
+        "保険金額 S",
+        "保険金額 S − 責任準備金 ₜV",
+        "責任準備金 ₜV",
+        "保険金額 S × 死亡率 qₓ"
+      ],
+      ans: 1,
+      exp: "危険保険金額（NAR）= 保険金額 S − 責任準備金 ₜV です。保険会社が実際に「リスクを引き受けている」部分であり、責任準備金が蓄積されると危険保険金額が減少します。保険料の危険保険料部分はNAR × 死亡率で計算されます。"
+    },
+    {
+      q: "生命保険料率の認可申請において、標準責任準備金を計算する際に使用する予定利率の上限は、一般的に何によって決まるか？",
+      opts: [
+        "日本銀行の政策金利",
+        "金融庁が定める標準利率",
+        "各保険会社が自由に設定できる",
+        "長期国債利回りの10年平均"
+      ],
+      ans: 1,
+      exp: "標準責任準備金の計算に使用する予定利率の上限は、金融庁が定める「標準利率」です。現在は年1.0%（参考値）が目安とされており、市場金利環境に応じて改定されます。責任準備金の健全性確保が目的です。"
+    },
+    {
+      q: "EV（Embedded Value）の主な構成要素として正しいものはどれか？",
+      opts: [
+        "修正純資産価値 + 保有契約価値",
+        "総資産 − 総負債",
+        "将来保険料収入の現在価値",
+        "ソルベンシーマージン比率 × 保険料"
+      ],
+      ans: 0,
+      exp: "EV（Embedded Value）＝ 修正純資産価値（Adjusted Net Worth）+ 保有契約価値（Value of In-force Business）です。保有契約価値は既存契約から将来生み出される利益の現在価値です。欧州では MCEV（Market Consistent EV）が普及しています。"
+    },
+  ],
+  advanced: [
+    {
+      q: "Lee-Carterモデルで死亡率改善を表す式として正しいものはどれか？（κₜ は時間因子、βₓ は年齢別感応度）",
+      opts: [
+        "ln(μₓ,ₜ) = αₓ + βₓ · κₜ + εₓ,ₜ",
+        "μₓ,ₜ = αₓ · exp(βₓ · κₜ)",
+        "ln(μₓ,ₜ) = αₓ · βₓ + κₜ",
+        "μₓ,ₜ = αₓ + βₓ + κₜ"
+      ],
+      ans: 0,
+      exp: "Lee-Carter(1992)モデルは ln(μₓ,ₜ) = αₓ + βₓ · κₜ + εₓ,ₜ です。αₓ は年齢別平均死亡率（対数）、βₓ は死亡率改善に対する年齢別感応度、κₜ は時代（年次）の死亡率改善の総合指標、εₓ,ₜ は誤差項です。κₜ はランダムウォークで将来外挿されます。"
+    },
+    {
+      q: "Solvency II（欧州）のSCR（Solvency Capital Requirement）の生命保険リスクモジュールに含まれないリスクはどれか？",
+      opts: [
+        "長寿リスク（Longevity risk）",
+        "死亡率リスク（Mortality risk）",
+        "解約リスク（Lapse risk）",
+        "信用集中リスク（Credit concentration risk）"
+      ],
+      ans: 3,
+      exp: "信用集中リスクは生命保険リスクモジュールではなく「市場リスクモジュール」に含まれます。生命保険リスクモジュールには、死亡率・長寿・傷病・解約・費用・改訂・巨大死亡リスクが含まれます。"
+    },
+    {
+      q: "経済価値ベースのソルベンシー規制（EBS/ICS）において、保険負債の最良推計（Best Estimate Liability: BEL）の算出に関して正しい説明はどれか？",
+      opts: [
+        "BEL = 将来キャッシュフローを無リスク金利カーブで割り引いた現在価値（リスクマージン除く）",
+        "BEL = 責任準備金 + ソルベンシーマージン",
+        "BEL = 保険料収入の現在価値 − 保険金支払の現在価値",
+        "BEL = VaR99.5% で計算した保険リスク"
+      ],
+      ans: 0,
+      exp: "BEL（最良推計負債）は将来の確率加重平均キャッシュフローを無リスク金利カーブ（OIS等）で割り引いた現在価値であり、リスクマージン（RM）は含みません。経済価値ベース負債 = BEL + RM。これにより市場整合的な負債評価が実現します。"
+    },
+    {
+      q: "自然保険料（OYT: One Year Term）方式と平準保険料方式を比較した際、平準保険料方式の特徴として誤っているものはどれか？",
+      opts: [
+        "初期に多くの保険料を払い込み、責任準備金が積み立てられる",
+        "保険期間を通じて保険料額が一定（年払の場合）",
+        "解約返戻金が生じる可能性がある",
+        "毎年の死亡率上昇に連動して保険料が増加する"
+      ],
+      ans: 3,
+      exp: "毎年保険料が増加するのは「自然保険料（OYT）方式」の特徴です。平準保険料方式は保険期間を通じて保険料額が一定で、若年時に過払いした分を高齢時の不足分に充てる仕組みです。この過払い分が責任準備金として積み立てられ、解約返戻金の原資となります。"
+    },
+    {
+      q: "IFRS 17における保険契約負債の構成要素として正しいものはどれか？",
+      opts: [
+        "FCF（将来キャッシュフロー） + CSM（契約上のサービスマージン） + RA（リスク調整）",
+        "BEL（最良推計） + SCR（ソルベンシー資本）",
+        "責任準備金 + 未経過保険料 + 支払備金",
+        "プレミアム現価 − 給付現価 + 利息調整"
+      ],
+      ans: 0,
+      exp: "IFRS 17では保険契約負債 ＝ FCF（フルフィルメントキャッシュフロー）+ CSM（契約上のサービスマージン）+ RA（リスク調整）で構成されます。CSMは未来に稼得される未稼得利益を表し、サービス提供に応じて順次損益計上されます。FCF ＝ 将来CF現価 + RA です。"
+    },
+  ]
+};
+
+let quizState = { diff: 'basic', idx: 0, score: 0, answered: false, finished: false };
+
+function setDiff(d) {
+  quizState = { diff: d, idx: 0, score: 0, answered: false, finished: false };
+  document.querySelectorAll('#difficulty-row .btn').forEach((b, i) => {
+    const diffs = ['basic', 'intermediate', 'advanced'];
+    b.className = 'btn ' + (diffs[i] === d ? 'btn-primary' : 'btn-outline');
+  });
+  initQuiz();
+}
+
+function initQuiz() {
+  if (!quizState.diff) quizState.diff = 'basic';
+  renderQuiz();
+}
+
+function renderQuiz() {
+  const qs = QUESTIONS[quizState.diff];
+  const container = document.getElementById('quiz-container');
+  if (quizState.finished) {
+    const pct = Math.round(quizState.score / qs.length * 100);
+    const badge = pct >= 80 ? `<span class="badge badge-green">優秀</span>` :
+                  pct >= 60 ? `<span class="badge badge-amber">合格</span>` :
+                              `<span class="badge badge-blue">要復習</span>`;
+    container.innerHTML = `<div class="score-box">
+      <div class="score-big">${pct}<span style="font-size:24px">%</span></div>
+      <div class="score-label" style="margin-bottom:12px">${quizState.score} / ${qs.length} 問正解 &nbsp; ${badge}</div>
+      <button class="btn btn-primary" onclick="setDiff('${quizState.diff}')">もう一度</button>
+      &nbsp;
+      <button class="btn btn-outline" onclick="setDiff(quizState.diff === 'basic' ? 'intermediate' : quizState.diff === 'intermediate' ? 'advanced' : 'basic')">次のレベル</button>
+    </div>`;
+    return;
+  }
+
+  if (quizState.idx >= qs.length) { quizState.finished = true; renderQuiz(); return; }
+  const q = qs[quizState.idx];
+  const levelBadge = { basic: '基礎', intermediate: '応用', advanced: '上級' }[quizState.diff];
+  const levelColor = { basic: 'badge-blue', intermediate: 'badge-amber', advanced: 'badge-green' }[quizState.diff];
+
+  container.innerHTML = `
+    <div class="quiz-header">
+      <span class="badge ${levelColor}">${levelBadge}</span>
+      <span class="quiz-progress">${quizState.idx + 1} / ${qs.length} &nbsp;｜&nbsp; 正解 ${quizState.score}</span>
+    </div>
+    <div class="question-text">${q.q.replace(/\n/g, '<br>')}</div>
+    <div class="options">
+      ${q.opts.map((o, i) => `<button class="option-btn" id="opt-${i}" onclick="answerQ(${i})">${String.fromCharCode(65+i)}. ${o}</button>`).join('')}
+    </div>
+    <div class="explanation" id="explanation">${q.exp}</div>
+    <div style="margin-top:14px;display:flex;gap:8px;" id="next-row" style="display:none">
+      <button class="btn btn-primary" id="next-btn" onclick="nextQ()" style="display:none">次の問題 →</button>
+    </div>`;
+}
+
+function answerQ(i) {
+  if (quizState.answered) return;
+  quizState.answered = true;
+  const q = QUESTIONS[quizState.diff][quizState.idx];
+  document.querySelectorAll('.option-btn').forEach((b, idx) => {
+    b.disabled = true;
+    if (idx === q.ans) b.classList.add('correct');
+    else if (idx === i && i !== q.ans) b.classList.add('wrong');
+  });
+  if (i === q.ans) quizState.score++;
+  document.getElementById('explanation').classList.add('show');
+  document.getElementById('next-btn').style.display = '';
+}
+
+function nextQ() {
+  quizState.idx++;
+  quizState.answered = false;
+  renderQuiz();
+}
+
+// ============================================================
+// Init
+// ============================================================
+update();
+</script>
+</body>
+</html>
